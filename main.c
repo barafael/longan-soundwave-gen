@@ -68,6 +68,9 @@ int main(void)
     dma_config();
     dac_config();
     timer5_config();
+
+    uint8_t muted = 0;
+
     while (1){
         /* wait until ADDSEND bit is set */
         while(!i2c_flag_get(I2C0, I2C_FLAG_ADDSEND));
@@ -82,12 +85,29 @@ int main(void)
                 i++;
             } else if (i2c_flag_get(I2C0, I2C_FLAG_STPDET)) {
                 i2c_enable(I2C0);
-                if (i == 3) {
-                    if (i2c_receiver[0] = 0x55) {
-                        uint16_t freq = i2c_receiver[2] | (uint16_t)i2c_receiver[1] << 8;
-                        uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
-                        timer_autoreload_value_config(TIMER5, arr);
-                    }
+                /* stop detected, now handle command */
+                switch (i) {
+                    case 1:
+                        {
+                            if (i2c_receiver[0] == 0x33) {
+                                if (muted) {
+                                    timer_update_event_enable(TIMER5);
+                                } else {
+                                    timer_update_event_disable(TIMER5);
+                                }
+                                muted = !muted;
+                            }
+                        }
+                        break;
+                    case 3:
+                        {
+                            if (i2c_receiver[0] == 0x55) {
+                                uint16_t freq = i2c_receiver[2] | (uint16_t)i2c_receiver[1] << 8;
+                                uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
+                                timer_autoreload_value_config(TIMER5, arr);
+                            }
+                        }
+                        break;
                 }
                 i = 0;
                 break;
