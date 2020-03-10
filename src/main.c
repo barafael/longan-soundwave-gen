@@ -37,22 +37,22 @@ OF SUCH DAMAGE.
 #include "gd32vf103.h"
 #include "systick.h"
 
-#define I2C0_OWN_ADDRESS7      0x82
-
 #define TIMER5_PRESCALER 0xff
 
 uint8_t i2c_receiver[128];
-
 #define DAC0_R8DH_ADDRESS    (0x40007410)
 
 #include "snd.h"
+
+#define I2C_BASE_ADDRESS 0x82
 
 void rcu_config(void);
 void gpio_config(void);
 void dma_config(void);
 void dac_config(void);
 void timer5_config(void);
-void i2c_config(void);
+uint8_t get_i2c_address_bits(void);
+void i2c_config(uint32_t address_bits);
 
 /*!
     \brief      main function
@@ -64,7 +64,9 @@ int main(void)
 {
     rcu_config();
     gpio_config();
-    i2c_config();
+    delay_1ms(500);
+    uint32_t address_bits = get_i2c_address_bits();
+    i2c_config(address_bits);
     dma_config();
     dac_config();
     timer5_config();
@@ -76,7 +78,6 @@ int main(void)
         while(!i2c_flag_get(I2C0, I2C_FLAG_ADDSEND));
         /* clear ADDSEND bit */
         i2c_flag_clear(I2C0, I2C_FLAG_ADDSEND);
-        //printf("\r\n I2C slave receive data: \r\n\n");
         int i = 0;
         while(1) {
             if (i2c_flag_get(I2C0, I2C_FLAG_RBNE)) {
@@ -127,10 +128,14 @@ void rcu_config(void)
     /* enable the clock of peripherals */
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_GPIOB);
+    rcu_periph_clock_enable(RCU_GPIOC);
+    rcu_periph_clock_enable(RCU_AF);
+
     rcu_periph_clock_enable(RCU_I2C0);
     rcu_periph_clock_enable(RCU_DMA1);
     rcu_periph_clock_enable(RCU_DAC);
     rcu_periph_clock_enable(RCU_TIMER5);
+    rcu_periph_clock_enable(RCU_TIMER6);
 }
 
 /*!
@@ -142,25 +147,34 @@ void rcu_config(void)
 void gpio_config(void)
 {
     /* once enabled the DAC, the corresponding GPIO pin is connected to the DAC converter automatically */
-    gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4);
+    gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4 | GPIO_PIN_5);
+
+    gpio_init(GPIOA, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_8 | GPIO_PIN_11 | GPIO_PIN_12);
+    gpio_init(GPIOB, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_15);
+
     /* connect PB6 to I2C0_SCL */
     /* connect PB7 to I2C0_SDA */
     gpio_init(GPIOB, GPIO_MODE_AF_OD, GPIO_OSPEED_50MHZ, GPIO_PIN_6 | GPIO_PIN_7);
+    
+    /* LED pin PC13 */
+    gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_13);
+    gpio_bit_reset(GPIOC, GPIO_PIN_13);
 }
 
 /*!
-    \brief      cofigure the I2C0 interfaces
+    \brief      configure the I2C0 interfaces
     \param[in]  none
     \param[out] none
     \retval     none
 */
-void i2c_config(void)
+void i2c_config(uint32_t address_bits)
 {
+    uint8_t i2c_address = I2C_BASE_ADDRESS + address_bits * 4;
     /* I2C clock configure */
     i2c_clock_config(I2C0, 100000, I2C_DTCY_2);
     /* I2C address configure */
+    i2c_mode_addr_config(I2C0, I2C_I2CMODE_ENABLE, I2C_ADDFORMAT_7BITS, i2c_address);
     /* enable I2C0 */
-    i2c_mode_addr_config(I2C0, I2C_I2CMODE_ENABLE, I2C_ADDFORMAT_7BITS, I2C0_OWN_ADDRESS7);
     i2c_enable(I2C0);
     /* enable acknowledge */
     i2c_ack_config(I2C0, I2C_ACK_ENABLE);
@@ -231,4 +245,14 @@ void timer5_config(void)
     timer_master_output_trigger_source_select(TIMER5, TIMER_TRI_OUT_SRC_UPDATE);
     
     timer_enable(TIMER5);
+}
+
+uint8_t get_i2c_address_bits(void) {
+    uint8_t address_bit_0 = gpio_input_bit_get(GPIOA, GPIO_PIN_8) == SET ? 1 : 0;
+    uint8_t address_bit_1 = gpio_input_bit_get(GPIOA, GPIO_PIN_11) == SET ? 1 : 0;
+    uint8_t address_bit_2 = gpio_input_bit_get(GPIOA, GPIO_PIN_12) == SET ? 1 : 0;
+    uint8_t result = address_bit_0;
+    result |= address_bit_1 << 1;
+    result |= address_bit_2 << 2;
+    return result;
 }
