@@ -149,7 +149,12 @@ void gpio_config(void)
     /* once enabled the DAC, the corresponding GPIO pin is connected to the DAC converter automatically */
     gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4 | GPIO_PIN_5);
 
-    gpio_init(GPIOA, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_8 | GPIO_PIN_11 | GPIO_PIN_12);
+    /* PB12, PB13, PB14 as input pins */
+    gpio_init(GPIOB, GPIO_MODE_IPD, GPIO_OSPEED_2MHZ, GPIO_PIN_12);
+    gpio_init(GPIOB, GPIO_MODE_IPD, GPIO_OSPEED_2MHZ, GPIO_PIN_13);
+    gpio_init(GPIOB, GPIO_MODE_IPD, GPIO_OSPEED_2MHZ, GPIO_PIN_14);
+
+    /* User Button on PB15 */
     gpio_init(GPIOB, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_15);
 
     /* connect PB6 to I2C0_SCL */
@@ -248,9 +253,9 @@ void timer5_config(void)
 }
 
 uint8_t get_i2c_address_bits(void) {
-    uint8_t address_bit_0 = gpio_input_bit_get(GPIOA, GPIO_PIN_8) == SET ? 1 : 0;
-    uint8_t address_bit_1 = gpio_input_bit_get(GPIOA, GPIO_PIN_11) == SET ? 1 : 0;
-    uint8_t address_bit_2 = gpio_input_bit_get(GPIOA, GPIO_PIN_12) == SET ? 1 : 0;
+    uint8_t address_bit_0 = gpio_input_bit_get(GPIOB, GPIO_PIN_12) == SET ? 1 : 0;
+    uint8_t address_bit_1 = gpio_input_bit_get(GPIOB, GPIO_PIN_13) == SET ? 1 : 0;
+    uint8_t address_bit_2 = gpio_input_bit_get(GPIOB, GPIO_PIN_14) == SET ? 1 : 0;
     uint8_t result = address_bit_0;
     result |= address_bit_1 << 1;
     result |= address_bit_2 << 2;
