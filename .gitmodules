@@ -1,0 +1,3 @@
+[submodule "humanophone-slave-PCB"]
+	path = humanophone-slave-PCB
+	url = https://github.com/barafael/humanophone-slave-PCB
