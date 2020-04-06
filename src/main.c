@@ -38,23 +38,47 @@ OF SUCH DAMAGE.
 #include "systick.h"
 
 #include <stdbool.h>
+#include <math.h>
 
 #define TIMER5_PRESCALER 0x0
+#define TIMER6_PRESCALER 0x0
 
 uint8_t i2c0_receiver[128];
 uint8_t i2c1_receiver[128];
 
 #define DAC0_R8DH_ADDRESS (0x40007410)
+#define DAC1_R8DH_ADDRESS (0x4000741C)
 
 #include "snd.h"
 
 #define I2C_BASE_ADDRESS 0x40
 
+double sound_func(double x);
+void sample(double array[], size_t n);
+
+double sound_func(double x) {
+    return sin(x);
+}
+
+void sample(double array[], size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        double factor = (double)i / (double)n;
+        array[i] = sound_func((factor * (2.0 * 3.1417) - 3.1417));
+    }
+}
+
+void sample_to_u8(const double input[], uint8_t output[], size_t n) {
+    for (size_t index = 0; index < n; index++) {
+        output[index] = 128 + (128.0 * input[index]);
+    }
+}
+
 void    rcu_config(void);
 void    gpio_config(void);
-void    dma_config(void);
+void    dma_config(uint32_t channel, uint32_t data_address, size_t n);
 void    dac_config(void);
 void    timer5_config(void);
+void    timer6_config(void);
 uint8_t get_i2c_address_bits(void);
 void    i2c_config(uint32_t address_bits);
 
@@ -65,14 +89,26 @@ void    i2c_config(uint32_t address_bits);
     \retval     none
 */
 int main(void) {
+    double arr[2048];
+    uint8_t soundwave1[1024];
+    uint8_t soundwave2[1024];
+
+    sample(arr, 2048);
+    sample_to_u8(arr, soundwave1, 1024);
+
+    sample(arr, 800);
+    sample_to_u8(arr, soundwave2, 800);
+
     rcu_config();
     gpio_config();
     delay_1ms(100);
     uint32_t bits = get_i2c_address_bits();
     i2c_config(bits);
-    dma_config();
+    dma_config(DMA_CH2, (uint32_t)soundwave1, 1024);
+    dma_config(DMA_CH3, (uint32_t)soundwave2, 800);
     dac_config();
     timer5_config();
+    timer6_config();
 
     /*while (1) {
         uint32_t bits = get_i2c_address_bits();
@@ -197,7 +233,8 @@ void rcu_config(void) {
 */
 void gpio_config(void) {
     /* once enabled the DAC, the corresponding GPIO pin is connected to the DAC converter automatically */
-    gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4 | GPIO_PIN_5);
+    gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4);
+    gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_5);
 
     /* PB12, PB13, PB14 as input pins */
     gpio_init(GPIOB, GPIO_MODE_IPD, GPIO_OSPEED_2MHZ, GPIO_PIN_12);
@@ -253,28 +290,38 @@ void i2c_config(uint32_t address_bits) {
     \param[out] none
     \retval     none
 */
-void dma_config(void) {
-    dma_parameter_struct dma_struct;
+void dma_config(uint32_t DMA_CHANNEL, uint32_t data_address, size_t n) {
+    if (DMA_CHANNEL != DMA_CH2 && DMA_CHANNEL != DMA_CH3) {
+        return;
+    }
+
     /* clear all the interrupt flags */
-    dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_GIF);
-    dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_FTFIF);
-    dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_HTFIF);
-    dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_ERRIF);
+    dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_GIF);
+    dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_FTFIF);
+    dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_HTFIF);
+    dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_ERRIF);
 
-    /* configure the DMA1 channel 2 */
-    dma_struct.periph_addr  = DAC0_R8DH_ADDRESS;
-    dma_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
-    dma_struct.memory_addr  = (uint32_t)sound;
-    dma_struct.memory_width = DMA_MEMORY_WIDTH_8BIT;
-    dma_struct.number       = SIZE;
-    dma_struct.priority     = DMA_PRIORITY_ULTRA_HIGH;
-    dma_struct.periph_inc   = DMA_PERIPH_INCREASE_DISABLE;
-    dma_struct.memory_inc   = DMA_MEMORY_INCREASE_ENABLE;
-    dma_struct.direction    = DMA_MEMORY_TO_PERIPHERAL;
-    dma_init(DMA1, DMA_CH2, &dma_struct);
+    static dma_parameter_struct dma_config_struct = {
+        .periph_addr  = 0,
+        .periph_width = DMA_PERIPHERAL_WIDTH_8BIT,
+        .memory_addr  = 0,
+        .memory_width = DMA_MEMORY_WIDTH_8BIT,
+        .number       = 0,
+        .priority     = DMA_PRIORITY_ULTRA_HIGH,
+        .periph_inc   = DMA_PERIPH_INCREASE_DISABLE,
+        .memory_inc   = DMA_MEMORY_INCREASE_ENABLE,
+        .direction    = DMA_MEMORY_TO_PERIPHERAL,
+    };
 
-    dma_circulation_enable(DMA1, DMA_CH2);
-    dma_channel_enable(DMA1, DMA_CH2);
+    dma_config_struct.periph_addr = DMA_CHANNEL == DMA_CH2 ? DAC0_R8DH_ADDRESS : DAC1_R8DH_ADDRESS;
+    dma_config_struct.memory_addr = data_address;
+    dma_config_struct.number = n;
+
+    /* configure the DMA */
+    dma_init(DMA1, DMA_CHANNEL, &dma_config_struct);
+
+    dma_circulation_enable(DMA1, DMA_CHANNEL);
+    dma_channel_enable(DMA1, DMA_CHANNEL);
 }
 
 /*!
@@ -294,6 +341,16 @@ void dac_config(void) {
     /* enable DAC0 and DMA for DAC0 */
     dac_enable(DAC0);
     dac_dma_enable(DAC0);
+
+    /* configure the DAC1 */
+    dac_trigger_source_config(DAC1, DAC_TRIGGER_T6_TRGO);
+    dac_trigger_enable(DAC1);
+    dac_wave_mode_config(DAC1, DAC_WAVE_DISABLE);
+    dac_output_buffer_disable(DAC1);
+
+    /* enable DAC1 and DMA for DAC1 */
+    dac_enable(DAC1);
+    dac_dma_enable(DAC1);
 }
 
 /*!
@@ -309,6 +366,21 @@ void timer5_config(void) {
     timer_master_output_trigger_source_select(TIMER5, TIMER_TRI_OUT_SRC_UPDATE);
 
     timer_enable(TIMER5);
+}
+
+/*!
+    \brief      configure the TIMER6
+    \param[in]  none
+    \param[out] none
+    \retval     none
+*/
+void timer6_config(void) {
+    /* configure the TIMER6 */
+    timer_prescaler_config(TIMER6, TIMER6_PRESCALER, TIMER_PSC_RELOAD_UPDATE);
+    timer_autoreload_value_config(TIMER6, 0xFF);
+    timer_master_output_trigger_source_select(TIMER6, TIMER_TRI_OUT_SRC_UPDATE);
+
+    timer_enable(TIMER6);
 }
 
 uint8_t get_i2c_address_bits(void) {
