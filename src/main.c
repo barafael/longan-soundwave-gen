@@ -37,22 +37,26 @@ OF SUCH DAMAGE.
 #include "gd32vf103.h"
 #include "systick.h"
 
-#define TIMER5_PRESCALER 0xff
+#include <stdbool.h>
 
-uint8_t i2c_receiver[128];
-#define DAC0_R8DH_ADDRESS    (0x40007410)
+#define TIMER5_PRESCALER 0x0
+
+uint8_t i2c0_receiver[128];
+uint8_t i2c1_receiver[128];
+
+#define DAC0_R8DH_ADDRESS (0x40007410)
 
 #include "snd.h"
 
-#define I2C_BASE_ADDRESS 0x82
+#define I2C_BASE_ADDRESS 0x40
 
-void rcu_config(void);
-void gpio_config(void);
-void dma_config(void);
-void dac_config(void);
-void timer5_config(void);
+void    rcu_config(void);
+void    gpio_config(void);
+void    dma_config(void);
+void    dac_config(void);
+void    timer5_config(void);
 uint8_t get_i2c_address_bits(void);
-void i2c_config(uint32_t address_bits);
+void    i2c_config(uint32_t address_bits);
 
 /*!
     \brief      main function
@@ -60,37 +64,48 @@ void i2c_config(uint32_t address_bits);
     \param[out] none
     \retval     none
 */
-int main(void)
-{
+int main(void) {
     rcu_config();
     gpio_config();
-    delay_1ms(500);
-    uint32_t address_bits = get_i2c_address_bits();
-    i2c_config(address_bits);
+    delay_1ms(100);
+    uint32_t bits = get_i2c_address_bits();
+    i2c_config(bits);
     dma_config();
     dac_config();
     timer5_config();
 
-    uint8_t muted = 0;
+    /*while (1) {
+        uint32_t bits = get_i2c_address_bits();
+        //while(gpio_input_bit_get(GPIOB, GPIO_PIN_15) == RESET);
+        for (size_t index = 0; index < bits; index++) {
+            gpio_bit_reset(GPIOC, GPIO_PIN_13);
+            delay_1ms(400);
+            gpio_bit_set(GPIOC, GPIO_PIN_13);
+            delay_1ms(400);
+        }
+        delay_1ms(1000);
+    }*/
 
-    while (1){
-        /* wait until ADDSEND bit is set */
-        while(!i2c_flag_get(I2C0, I2C_FLAG_ADDSEND));
-        /* clear ADDSEND bit */
-        i2c_flag_clear(I2C0, I2C_FLAG_ADDSEND);
-        int i = 0;
-        while(1) {
-            if (i2c_flag_get(I2C0, I2C_FLAG_RBNE)) {
-                /* read a data byte from I2C_DATA */
-                i2c_receiver[i] = i2c_data_receive(I2C0);
-                i++;
-            } else if (i2c_flag_get(I2C0, I2C_FLAG_STPDET)) {
-                i2c_enable(I2C0);
-                /* stop detected, now handle command */
-                switch (i) {
-                    case 1:
-                        {
-                            if (i2c_receiver[0] == 0x33) {
+    uint8_t muted = false;
+
+    while (1) {
+        /* check if ADDSEND bit is set */
+        if (i2c_flag_get(I2C0, I2C_FLAG_ADDSEND)) {
+            /* clear ADDSEND bit */
+            i2c_flag_clear(I2C0, I2C_FLAG_ADDSEND);
+            int i = 0;
+            while (1) {
+                if (i2c_flag_get(I2C0, I2C_FLAG_RBNE)) {
+                    /* read a data byte from I2C_DATA */
+                    i2c0_receiver[i] = i2c_data_receive(I2C0);
+                    i++;
+                } else if (i2c_flag_get(I2C0, I2C_FLAG_STPDET)) {
+                    i2c_enable(I2C0);
+                    /* stop detected, now handle command */
+                    // todo: dont switch on length.
+                    switch (i) {
+                        case 1: {
+                            if (i2c0_receiver[0] == 0x33) {
                                 if (muted) {
                                     timer_update_event_enable(TIMER5);
                                 } else {
@@ -98,20 +113,56 @@ int main(void)
                                 }
                                 muted = !muted;
                             }
-                        }
-                        break;
-                    case 3:
-                        {
-                            if (i2c_receiver[0] == 0x55) {
-                                uint16_t freq = i2c_receiver[2] | (uint16_t)i2c_receiver[1] << 8;
-                                uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
-                                timer_autoreload_value_config(TIMER5, arr);
+                        } break;
+                        case 3: {
+                            if (i2c0_receiver[0] == 0x55) {
+                                uint32_t freq = i2c0_receiver[2] | (uint16_t) i2c0_receiver[1] << 8;
+                                //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
+                                timer_autoreload_value_config(TIMER5, freq);
                             }
-                        }
-                        break;
+                        } break;
+                    }
+                    i = 0;
+                    break;
                 }
-                i = 0;
-                break;
+            }
+        }
+
+        /* wait until ADDSEND bit is set */
+        if (i2c_flag_get(I2C1, I2C_FLAG_ADDSEND)) {
+            /* clear ADDSEND bit */
+            i2c_flag_clear(I2C1, I2C_FLAG_ADDSEND);
+            int j = 0;
+            while (1) {
+                if (i2c_flag_get(I2C1, I2C_FLAG_RBNE)) {
+                    /* read a data byte from I2C_DATA */
+                    i2c1_receiver[j] = i2c_data_receive(I2C1);
+                    j++;
+                } else if (i2c_flag_get(I2C1, I2C_FLAG_STPDET)) {
+                    i2c_enable(I2C1);
+                    /* stop detected, now handle command */
+                    switch (j) {
+                        case 1: {
+                            if (i2c1_receiver[0] == 0x33) {
+                                if (muted) {
+                                    timer_update_event_enable(TIMER5);
+                                } else {
+                                    timer_update_event_disable(TIMER5);
+                                }
+                                muted = !muted;
+                            }
+                        } break;
+                        case 3: {
+                            if (i2c1_receiver[0] == 0x55) {
+                                uint32_t freq = i2c1_receiver[2] | (uint16_t) i2c1_receiver[1] << 8;
+                                //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
+                                timer_autoreload_value_config(TIMER5, freq);
+                            }
+                        } break;
+                    }
+                    j = 0;
+                    break;
+                }
             }
         }
     }
@@ -123,8 +174,7 @@ int main(void)
     \param[out] none
     \retval     none
 */
-void rcu_config(void)
-{
+void rcu_config(void) {
     /* enable the clock of peripherals */
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_GPIOB);
@@ -132,6 +182,7 @@ void rcu_config(void)
     rcu_periph_clock_enable(RCU_AF);
 
     rcu_periph_clock_enable(RCU_I2C0);
+    rcu_periph_clock_enable(RCU_I2C1);
     rcu_periph_clock_enable(RCU_DMA1);
     rcu_periph_clock_enable(RCU_DAC);
     rcu_periph_clock_enable(RCU_TIMER5);
@@ -144,8 +195,7 @@ void rcu_config(void)
     \param[out] none
     \retval     none
 */
-void gpio_config(void)
-{
+void gpio_config(void) {
     /* once enabled the DAC, the corresponding GPIO pin is connected to the DAC converter automatically */
     gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4 | GPIO_PIN_5);
 
@@ -160,7 +210,11 @@ void gpio_config(void)
     /* connect PB6 to I2C0_SCL */
     /* connect PB7 to I2C0_SDA */
     gpio_init(GPIOB, GPIO_MODE_AF_OD, GPIO_OSPEED_50MHZ, GPIO_PIN_6 | GPIO_PIN_7);
-    
+
+    /* connect PB10 to I2C1_SCL */
+    /* connect PB11 to I2C1_SDA */
+    gpio_init(GPIOB, GPIO_MODE_AF_OD, GPIO_OSPEED_50MHZ, GPIO_PIN_10 | GPIO_PIN_11);
+
     /* LED pin PC13 */
     gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_13);
     gpio_bit_reset(GPIOC, GPIO_PIN_13);
@@ -172,17 +226,25 @@ void gpio_config(void)
     \param[out] none
     \retval     none
 */
-void i2c_config(uint32_t address_bits)
-{
-    uint8_t i2c_address = I2C_BASE_ADDRESS + address_bits * 4;
+void i2c_config(uint32_t address_bits) {
+    uint32_t i2c_address_0 = I2C_BASE_ADDRESS + address_bits * 2;
+    uint32_t i2c_address_1 = I2C_BASE_ADDRESS + address_bits * 2 + 16;
+
     /* I2C clock configure */
     i2c_clock_config(I2C0, 100000, I2C_DTCY_2);
+    i2c_clock_config(I2C1, 100000, I2C_DTCY_2);
+
     /* I2C address configure */
-    i2c_mode_addr_config(I2C0, I2C_I2CMODE_ENABLE, I2C_ADDFORMAT_7BITS, i2c_address);
-    /* enable I2C0 */
+    i2c_mode_addr_config(I2C0, I2C_I2CMODE_ENABLE, I2C_ADDFORMAT_7BITS, i2c_address_0);
+    i2c_mode_addr_config(I2C1, I2C_I2CMODE_ENABLE, I2C_ADDFORMAT_7BITS, i2c_address_1);
+
+    /* enable I2C */
     i2c_enable(I2C0);
+    i2c_enable(I2C1);
+
     /* enable acknowledge */
     i2c_ack_config(I2C0, I2C_ACK_ENABLE);
+    i2c_ack_config(I2C1, I2C_ACK_ENABLE);
 }
 
 /*!
@@ -191,15 +253,14 @@ void i2c_config(uint32_t address_bits)
     \param[out] none
     \retval     none
 */
-void dma_config(void)
-{
+void dma_config(void) {
     dma_parameter_struct dma_struct;
     /* clear all the interrupt flags */
     dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_GIF);
     dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_FTFIF);
     dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_HTFIF);
     dma_flag_clear(DMA1, DMA_CH2, DMA_INTF_ERRIF);
-    
+
     /* configure the DMA1 channel 2 */
     dma_struct.periph_addr  = DAC0_R8DH_ADDRESS;
     dma_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
@@ -222,15 +283,14 @@ void dma_config(void)
     \param[out] none
     \retval     none
 */
-void dac_config(void)
-{
+void dac_config(void) {
     dac_deinit();
     /* configure the DAC0 */
     dac_trigger_source_config(DAC0, DAC_TRIGGER_T5_TRGO);
     dac_trigger_enable(DAC0);
     dac_wave_mode_config(DAC0, DAC_WAVE_DISABLE);
     dac_output_buffer_disable(DAC0);
-    
+
     /* enable DAC0 and DMA for DAC0 */
     dac_enable(DAC0);
     dac_dma_enable(DAC0);
@@ -242,13 +302,12 @@ void dac_config(void)
     \param[out] none
     \retval     none
 */
-void timer5_config(void)
-{
+void timer5_config(void) {
     /* configure the TIMER5 */
     timer_prescaler_config(TIMER5, TIMER5_PRESCALER, TIMER_PSC_RELOAD_UPDATE);
     timer_autoreload_value_config(TIMER5, 0xFF);
     timer_master_output_trigger_source_select(TIMER5, TIMER_TRI_OUT_SRC_UPDATE);
-    
+
     timer_enable(TIMER5);
 }
 
@@ -256,7 +315,7 @@ uint8_t get_i2c_address_bits(void) {
     uint8_t address_bit_0 = gpio_input_bit_get(GPIOB, GPIO_PIN_12) == SET ? 1 : 0;
     uint8_t address_bit_1 = gpio_input_bit_get(GPIOB, GPIO_PIN_13) == SET ? 1 : 0;
     uint8_t address_bit_2 = gpio_input_bit_get(GPIOB, GPIO_PIN_14) == SET ? 1 : 0;
-    uint8_t result = address_bit_0;
+    uint8_t result        = address_bit_0;
     result |= address_bit_1 << 1;
     result |= address_bit_2 << 2;
     return result;
