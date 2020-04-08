@@ -47,7 +47,7 @@ double sound_func(double x) {
 void sample(double array[], size_t n) {
     for (size_t i = 0; i < n; i++) {
         double factor = (double)i / (double)n;
-        array[i] = sound_func((factor * (2.0 * 3.1417) - 3.1417));
+        array[i] = sound_func((factor * (2.0 * M_PI) - M_PI));
     }
 }
 
