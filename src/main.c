@@ -1,57 +1,41 @@
 /*!
     \file    main.c
     \brief   Soundwave Generator
-
-    \version 2019-6-5, V1.0.0, firmware for GD32VF103
 */
 
 /*
-    Copyright (c) 2020, GigaDevice Semiconductor Inc.
+    Copyright (c) 2020 Rafael Bachmann
 
-    All rights reserved.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-    Redistribution and use in source and binary forms, with or without modification, 
-are permitted provided that the following conditions are met:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-    1. Redistributions of source code must retain the above copyright notice, this 
-       list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice, 
-       this list of conditions and the following disclaimer in the documentation 
-       and/or other materials provided with the distribution.
-    3. Neither the name of the copyright holder nor the names of its contributors 
-       may be used to endorse or promote products derived from this software without 
-       specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
-NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
-PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
-OF SUCH DAMAGE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 */
 
 #include "gd32vf103.h"
 #include "systick.h"
 
-#include <stdbool.h>
-#include <math.h>
-
-#define TIMER5_PRESCALER 0x0
-#define TIMER6_PRESCALER 0x0
+#include "main.h"
 
 uint8_t i2c0_receiver[128];
 uint8_t i2c1_receiver[128];
 
-#define DAC0_R8DH_ADDRESS (0x40007410)
-#define DAC1_R8DH_ADDRESS (0x4000741C)
-
 #include "snd.h"
 
-#define I2C_BASE_ADDRESS 0x40
+uint8_t muted = false;
 
 double sound_func(double x);
 void sample(double array[], size_t n);
@@ -122,8 +106,6 @@ int main(void) {
         delay_1ms(1000);
     }*/
 
-    uint8_t muted = false;
-
     while (1) {
         /* check if ADDSEND bit is set */
         if (i2c_flag_get(I2C0, I2C_FLAG_ADDSEND)) {
@@ -141,7 +123,7 @@ int main(void) {
                     // todo: dont switch on length.
                     switch (i) {
                         case 1: {
-                            if (i2c0_receiver[0] == 0x33) {
+                            if (i2c0_receiver[0] == TOGGLE_MUTED_REG) {
                                 if (muted) {
                                     timer_update_event_enable(TIMER5);
                                 } else {
@@ -151,7 +133,7 @@ int main(void) {
                             }
                         } break;
                         case 3: {
-                            if (i2c0_receiver[0] == 0x55) {
+                            if (i2c0_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c0_receiver[2] | (uint16_t) i2c0_receiver[1] << 8;
                                 //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
                                 timer_autoreload_value_config(TIMER5, freq);
@@ -179,20 +161,20 @@ int main(void) {
                     /* stop detected, now handle command */
                     switch (j) {
                         case 1: {
-                            if (i2c1_receiver[0] == 0x33) {
+                            if (i2c1_receiver[0] == TOGGLE_MUTED_REG) {
                                 if (muted) {
-                                    timer_update_event_enable(TIMER5);
+                                    timer_update_event_enable(TIMER6);
                                 } else {
-                                    timer_update_event_disable(TIMER5);
+                                    timer_update_event_disable(TIMER6);
                                 }
                                 muted = !muted;
                             }
                         } break;
                         case 3: {
-                            if (i2c1_receiver[0] == 0x55) {
+                            if (i2c1_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c1_receiver[2] | (uint16_t) i2c1_receiver[1] << 8;
                                 //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
-                                timer_autoreload_value_config(TIMER5, freq);
+                                timer_autoreload_value_config(TIMER6, freq);
                             }
                         } break;
                     }
