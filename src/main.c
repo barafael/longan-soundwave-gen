@@ -30,15 +30,10 @@ SOFTWARE.
 
 #include "main.h"
 
-uint8_t i2c0_receiver[128];
-uint8_t i2c1_receiver[128];
-
-#include "snd.h"
+uint8_t i2c0_receiver[32];
+uint8_t i2c1_receiver[32];
 
 uint8_t muted = false;
-
-double sound_func(double x);
-void sample(double array[], size_t n);
 
 double sound_func(double x) {
     return sin(x);
@@ -57,6 +52,11 @@ void sample_to_u8(const double input[], uint8_t output[], size_t n) {
     }
 }
 
+void resample(double array[], uint8_t output[], size_t n) {
+    sample(array, n);
+    sample_to_u8(array, output, n);
+}
+
 void    rcu_config(void);
 void    gpio_config(void);
 void    dma_config(uint32_t channel, uint32_t data_address, size_t n);
@@ -66,6 +66,11 @@ void    timer6_config(void);
 uint8_t get_i2c_address_bits(void);
 void    i2c_config(uint32_t address_bits);
 
+#define BUFFER_SIZE 2048
+double  signal[BUFFER_SIZE];
+uint8_t soundwave1[BUFFER_SIZE];
+uint8_t soundwave2[BUFFER_SIZE];
+
 /*!
     \brief      main function
     \param[in]  none
@@ -73,23 +78,20 @@ void    i2c_config(uint32_t address_bits);
     \retval     none
 */
 int main(void) {
-    double arr[2048];
-    uint8_t soundwave1[1024];
-    uint8_t soundwave2[1024];
 
-    sample(arr, 2048);
-    sample_to_u8(arr, soundwave1, 1024);
+    sample(signal, BUFFER_SIZE);
+    sample_to_u8(signal, soundwave1, BUFFER_SIZE);
 
-    sample(arr, 800);
-    sample_to_u8(arr, soundwave2, 800);
+    sample(signal, BUFFER_SIZE);
+    sample_to_u8(signal, soundwave2, BUFFER_SIZE);
 
     rcu_config();
     gpio_config();
     delay_1ms(100);
     uint32_t bits = get_i2c_address_bits();
     i2c_config(bits);
-    dma_config(DMA_CH2, (uint32_t)soundwave1, 1024);
-    dma_config(DMA_CH3, (uint32_t)soundwave2, 800);
+    dma_config(DMA_CH2, (uint32_t)soundwave1, BUFFER_SIZE);
+    dma_config(DMA_CH3, (uint32_t)soundwave2, BUFFER_SIZE);
     dac_config();
     timer5_config();
     timer6_config();
@@ -120,7 +122,6 @@ int main(void) {
                 } else if (i2c_flag_get(I2C0, I2C_FLAG_STPDET)) {
                     i2c_enable(I2C0);
                     /* stop detected, now handle command */
-                    // todo: dont switch on length.
                     switch (i) {
                         case 1: {
                             if (i2c0_receiver[0] == TOGGLE_MUTED_REG) {
@@ -134,9 +135,11 @@ int main(void) {
                         } break;
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
-                                uint32_t freq = i2c0_receiver[2] | (uint16_t) i2c0_receiver[1] << 8;
-                                //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
-                                timer_autoreload_value_config(TIMER5, freq);
+                                uint32_t freq = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
+                                if (freq < BUFFER_SIZE) {
+                                    resample(signal, soundwave1, freq);
+                                    dma_config(DMA_CH2, (uint32_t)soundwave1, freq);
+                                }
                             }
                         } break;
                     }
@@ -172,9 +175,11 @@ int main(void) {
                         } break;
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
-                                uint32_t freq = i2c1_receiver[2] | (uint16_t) i2c1_receiver[1] << 8;
-                                //uint16_t arr = (27000000 / (TIMER5_PRESCALER - 1)) / freq;
-                                timer_autoreload_value_config(TIMER6, freq);
+                                uint32_t freq = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
+                                if (freq < BUFFER_SIZE) {
+                                    resample(signal, soundwave2, freq);
+                                    dma_config(DMA_CH3, (uint32_t)soundwave2, freq);
+                                }
                             }
                         } break;
                     }
@@ -282,6 +287,8 @@ void dma_config(uint32_t DMA_CHANNEL, uint32_t data_address, size_t n) {
     dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_FTFIF);
     dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_HTFIF);
     dma_flag_clear(DMA1, DMA_CHANNEL, DMA_INTF_ERRIF);
+
+    dma_deinit(DMA1, DMA_CHANNEL);
 
     static dma_parameter_struct dma_config_struct = {
         .periph_addr  = 0,
