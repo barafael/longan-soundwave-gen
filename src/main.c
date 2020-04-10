@@ -48,7 +48,7 @@ void sample(double array[], size_t n) {
 
 void sample_to_u8(const double input[], uint8_t output[], size_t n) {
     for (size_t index = 0; index < n; index++) {
-        output[index] = 128 + (128.0 * input[index]);
+        output[index] = 127 + (128.0 * input[index]);
     }
 }
 
