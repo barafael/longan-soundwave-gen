@@ -32,8 +32,8 @@ SOFTWARE.
 #define TOGGLE_MUTED_REG (uint32_t)0x33
 #define SET_PITCH_REG (uint32_t)0x55
 
-#define TIMER5_PRESCALER (uint32_t)0x0
-#define TIMER6_PRESCALER (uint32_t)0x0
+#define TIMER5_PRESCALER (uint32_t)0x4
+#define TIMER6_PRESCALER (uint32_t)0x4
 
 #define DAC0_R8DH_ADDRESS (uint32_t)0x40007410
 #define DAC1_R8DH_ADDRESS (uint32_t)0x4000741C

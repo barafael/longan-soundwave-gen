@@ -48,7 +48,7 @@ void sample(double array[], size_t n) {
 
 void sample_to_u8(const double input[], uint8_t output[], size_t n) {
     for (size_t index = 0; index < n; index++) {
-        output[index] = 127 + (128.0 * input[index]);
+        output[index] = 127 + (127.0 * input[index]);
     }
 }
 
@@ -136,9 +136,10 @@ int main(void) {
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
-                                if (freq < BUFFER_SIZE) {
-                                    resample(signal, soundwave1, freq);
-                                    dma_config(DMA_CH2, (uint32_t)soundwave1, freq);
+                                size_t buffer_length = 85096.3f / (float)freq;
+                                if (buffer_length < BUFFER_SIZE) {
+                                    resample(signal, soundwave1, buffer_length);
+                                    dma_config(DMA_CH2, (uint32_t)soundwave1, buffer_length);
                                 }
                             }
                         } break;
@@ -176,8 +177,9 @@ int main(void) {
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
-                                if (freq < BUFFER_SIZE) {
-                                    resample(signal, soundwave2, freq);
+                                size_t buffer_length = 85096.3f / (float)freq;
+                                if (buffer_length < BUFFER_SIZE) {
+                                    resample(signal, soundwave2, buffer_length);
                                     dma_config(DMA_CH3, (uint32_t)soundwave2, freq);
                                 }
                             }
