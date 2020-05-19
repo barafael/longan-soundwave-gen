@@ -33,7 +33,8 @@ SOFTWARE.
 uint8_t i2c0_receiver[32];
 uint8_t i2c1_receiver[32];
 
-uint8_t muted = false;
+uint8_t muted1 = false;
+uint8_t muted2 = false;
 
 double sound_func(double x) {
     return sin(x);
@@ -41,7 +42,7 @@ double sound_func(double x) {
 
 void sample(double array[], size_t n) {
     for (size_t i = 0; i < n; i++) {
-        double factor = (double)i / (double)n;
+        double factor = (double) i / (double) n;
         array[i] = sound_func((factor * (2.0 * M_PI) - M_PI));
     }
 }
@@ -78,36 +79,31 @@ uint8_t soundwave2[BUFFER_SIZE];
     \retval     none
 */
 int main(void) {
-
-    sample(signal, BUFFER_SIZE);
-    sample_to_u8(signal, soundwave1, BUFFER_SIZE);
-
-    sample(signal, BUFFER_SIZE);
-    sample_to_u8(signal, soundwave2, BUFFER_SIZE);
-
     rcu_config();
     gpio_config();
     delay_1ms(100);
     uint32_t bits = get_i2c_address_bits();
     i2c_config(bits);
-    dma_config(DMA_CH2, (uint32_t)soundwave1, BUFFER_SIZE);
-    dma_config(DMA_CH3, (uint32_t)soundwave2, BUFFER_SIZE);
+    dma_config(DMA_CH2, (uint32_t) soundwave1, BUFFER_SIZE);
+    dma_config(DMA_CH3, (uint32_t) soundwave2, BUFFER_SIZE);
     dac_config();
     timer5_config();
     timer6_config();
 
-    /*while (1) {
-        uint32_t bits = get_i2c_address_bits();
-        //while(gpio_input_bit_get(GPIOB, GPIO_PIN_15) == RESET);
-        for (size_t index = 0; index < bits; index++) {
-            gpio_bit_reset(GPIOC, GPIO_PIN_13);
-            delay_1ms(400);
-            gpio_bit_set(GPIOC, GPIO_PIN_13);
-            delay_1ms(400);
-        }
-        delay_1ms(1000);
-    }*/
+    timer_update_event_disable(TIMER5);
+    dma_channel_disable(DMA1, DMA_CH2);
 
+    timer_update_event_disable(TIMER6);
+    dma_channel_disable(DMA1, DMA_CH3);
+
+    for (size_t index = 0; index < bits; index++) {
+        gpio_bit_reset(GPIOC, GPIO_PIN_13);
+        delay_1ms(200);
+        gpio_bit_set(GPIOC, GPIO_PIN_13);
+        delay_1ms(200);
+    }
+
+    gpio_bit_reset(GPIOC, GPIO_PIN_13);
     while (1) {
         /* check if ADDSEND bit is set */
         if (i2c_flag_get(I2C0, I2C_FLAG_ADDSEND)) {
@@ -124,22 +120,22 @@ int main(void) {
                     /* stop detected, now handle command */
                     switch (i) {
                         case 1: {
-                            if (i2c0_receiver[0] == TOGGLE_MUTED_REG) {
-                                if (muted) {
-                                    timer_update_event_enable(TIMER5);
-                                } else {
-                                    timer_update_event_disable(TIMER5);
-                                }
-                                muted = !muted;
+                            if (i2c0_receiver[0] == SET_SILENT_REG) {
+                                timer_update_event_disable(TIMER5);
+                                dma_channel_disable(DMA1, DMA_CH2);
+                            }
+                            if (i2c0_receiver[0] == SET_UNSILENT_REG) {
+                                timer_update_event_enable(TIMER5);
+                                dma_channel_enable(DMA1, DMA_CH2);
                             }
                         } break;
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
-                                size_t buffer_length = 85096.3f / (float)freq;
+                                size_t buffer_length = 85097.05f / (float) freq;
                                 if (buffer_length < BUFFER_SIZE) {
                                     resample(signal, soundwave1, buffer_length);
-                                    dma_config(DMA_CH2, (uint32_t)soundwave1, buffer_length);
+                                    dma_config(DMA_CH2, (uint32_t) soundwave1, buffer_length);
                                 }
                             }
                         } break;
@@ -165,22 +161,22 @@ int main(void) {
                     /* stop detected, now handle command */
                     switch (j) {
                         case 1: {
-                            if (i2c1_receiver[0] == TOGGLE_MUTED_REG) {
-                                if (muted) {
-                                    timer_update_event_enable(TIMER6);
-                                } else {
-                                    timer_update_event_disable(TIMER6);
-                                }
-                                muted = !muted;
+                            if (i2c1_receiver[0] == SET_SILENT_REG) {
+                                timer_update_event_disable(TIMER6);
+                                dma_channel_disable(DMA1, DMA_CH3);
+                            }
+                            if (i2c1_receiver[0] == SET_UNSILENT_REG) {
+                                timer_update_event_enable(TIMER6);
+                                dma_channel_enable(DMA1, DMA_CH3);
                             }
                         } break;
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
-                                uint32_t freq = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
-                                size_t buffer_length = 85096.3f / (float)freq;
+                                uint32_t freq          = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
+                                size_t   buffer_length = 85097.05f / (float) freq;
                                 if (buffer_length < BUFFER_SIZE) {
                                     resample(signal, soundwave2, buffer_length);
-                                    dma_config(DMA_CH3, (uint32_t)soundwave2, freq);
+                                    dma_config(DMA_CH3, (uint32_t) soundwave2, buffer_length);
                                 }
                             }
                         } break;
@@ -242,8 +238,8 @@ void gpio_config(void) {
     gpio_init(GPIOB, GPIO_MODE_AF_OD, GPIO_OSPEED_50MHZ, GPIO_PIN_10 | GPIO_PIN_11);
 
     /* LED pin PC13 */
+    gpio_bit_set(GPIOC, GPIO_PIN_13);
     gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_13);
-    gpio_bit_reset(GPIOC, GPIO_PIN_13);
 }
 
 /*!
@@ -253,8 +249,8 @@ void gpio_config(void) {
     \retval     none
 */
 void i2c_config(uint32_t address_bits) {
-    uint32_t i2c_address_0 = I2C_BASE_ADDRESS + address_bits * 2;
-    uint32_t i2c_address_1 = I2C_BASE_ADDRESS + address_bits * 2 + 16;
+    uint32_t i2c_address_0 = I2C_BASE_ADDRESS + address_bits * 4;
+    uint32_t i2c_address_1 = I2C_BASE_ADDRESS + address_bits * 4 + 2;
 
     /* I2C clock configure */
     i2c_clock_config(I2C0, 100000, I2C_DTCY_2);
@@ -306,7 +302,7 @@ void dma_config(uint32_t DMA_CHANNEL, uint32_t data_address, size_t n) {
 
     dma_config_struct.periph_addr = DMA_CHANNEL == DMA_CH2 ? DAC0_R8DH_ADDRESS : DAC1_R8DH_ADDRESS;
     dma_config_struct.memory_addr = data_address;
-    dma_config_struct.number = n;
+    dma_config_struct.number      = n;
 
     /* configure the DMA */
     dma_init(DMA1, DMA_CHANNEL, &dma_config_struct);
@@ -353,7 +349,7 @@ void dac_config(void) {
 void timer5_config(void) {
     /* configure the TIMER5 */
     timer_prescaler_config(TIMER5, TIMER5_PRESCALER, TIMER_PSC_RELOAD_UPDATE);
-    timer_autoreload_value_config(TIMER5, 0xFF);
+    timer_autoreload_value_config(TIMER5, 0xCa);
     timer_master_output_trigger_source_select(TIMER5, TIMER_TRI_OUT_SRC_UPDATE);
 
     timer_enable(TIMER5);
