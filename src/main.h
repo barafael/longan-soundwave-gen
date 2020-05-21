@@ -33,15 +33,17 @@ SOFTWARE.
 #define SET_UNSILENT_REG (uint32_t)0x35
 #define SET_PITCH_REG (uint32_t)0x55
 
-#define TIMER5_PRESCALER (uint32_t)0x4
-#define TIMER6_PRESCALER (uint32_t)0x4
+#define TIMER5_PRESCALER (uint32_t)0x2
+#define TIMER6_PRESCALER (uint32_t)0x2
 
 #define DAC0_R8DH_ADDRESS (uint32_t)0x40007410
 #define DAC1_R8DH_ADDRESS (uint32_t)0x4000741C
 
-double sound_func(double x);
-void sample(double array[], size_t n);
+typedef double (*signal_function)(double);
+
+void sample(double array[], signal_function sig_func, size_t n);
 void sample_to_u8(const double input[], uint8_t output[], size_t n);
+void resample(double array[], uint8_t output[], signal_function sig_func, size_t n);
 
 void    rcu_config(void);
 void    gpio_config(void);

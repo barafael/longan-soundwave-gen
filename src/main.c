@@ -36,14 +36,22 @@ uint8_t i2c1_receiver[32];
 uint8_t muted1 = false;
 uint8_t muted2 = false;
 
-double sound_func(double x) {
+double simple_sine(double x) {
     return sin(x);
 }
 
-void sample(double array[], size_t n) {
+double simple_impulse(double x) {
+    if (x < (-M_PI + 0.1)) {
+        return 1.0;
+    } else {
+        return -1.0;
+    }
+}
+
+void sample(double array[], signal_function sig_func, size_t n) {
     for (size_t i = 0; i < n; i++) {
         double factor = (double) i / (double) n;
-        array[i] = sound_func((factor * (2.0 * M_PI) - M_PI));
+        array[i] = sig_func((factor * (2.0 * M_PI) - M_PI));
     }
 }
 
@@ -53,8 +61,8 @@ void sample_to_u8(const double input[], uint8_t output[], size_t n) {
     }
 }
 
-void resample(double array[], uint8_t output[], size_t n) {
-    sample(array, n);
+void resample(double array[], uint8_t output[], signal_function sig_func, size_t n) {
+    sample(array, sig_func, n);
     sample_to_u8(array, output, n);
 }
 
@@ -132,10 +140,12 @@ int main(void) {
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
-                                size_t buffer_length = 85097.05f / (float) freq;
+                                size_t buffer_length = 178057.870984831 * pow(freq, -1.00027640151947);
                                 if (buffer_length < BUFFER_SIZE) {
-                                    resample(signal, soundwave1, buffer_length);
+                                    resample(signal, soundwave1, simple_sine, buffer_length);
                                     dma_config(DMA_CH2, (uint32_t) soundwave1, buffer_length);
+                                    timer_update_event_enable(TIMER5);
+                                    dma_channel_enable(DMA1, DMA_CH2);
                                 }
                             }
                         } break;
@@ -173,10 +183,13 @@ int main(void) {
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
                                 uint32_t freq          = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
-                                size_t   buffer_length = 85097.05f / (float) freq;
+                                //size_t   buffer_length = 85097.05f / (float) freq;
+                                size_t buffer_length = 178057.870984831 * pow(freq, -1.00027640151947);
                                 if (buffer_length < BUFFER_SIZE) {
-                                    resample(signal, soundwave2, buffer_length);
+                                    resample(signal, soundwave2, simple_sine, buffer_length);
                                     dma_config(DMA_CH3, (uint32_t) soundwave2, buffer_length);
+                                    timer_update_event_enable(TIMER6);
+                                    dma_channel_enable(DMA1, DMA_CH3);
                                 }
                             }
                         } break;
