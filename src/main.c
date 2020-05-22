@@ -28,7 +28,11 @@ SOFTWARE.
 #include "gd32vf103.h"
 #include "systick.h"
 
+#include "stdbool.h"
+
 #include "main.h"
+
+#include "lcd.h"
 
 uint8_t i2c0_receiver[32];
 uint8_t i2c1_receiver[32];
@@ -66,6 +70,210 @@ void resample(double array[], uint8_t output[], signal_function sig_func, size_t
     sample_to_u8(array, output, n);
 }
 
+char *note_names[] = {
+    "B",
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+    "C",
+};
+
+char* get_note_name(uint32_t freq) {
+    if (freq < 127) {
+        return note_names[0];
+    }
+    if (freq < 135) {
+        return note_names[1];
+    }
+    if (freq < 143) {
+        return note_names[2];
+    }
+    if (freq < 151) {
+        return note_names[3];
+    }
+    if (freq < 160) {
+        return note_names[4];
+    }
+    if (freq < 170) {
+        return note_names[5];
+    }
+    if (freq < 180) {
+        return note_names[6];
+    }
+    if (freq < 191) {
+        return note_names[7];
+    }
+    if (freq < 202) {
+        return note_names[8];
+    }
+    if (freq < 214) {
+        return note_names[9];
+    }
+    if (freq < 227) {
+        return note_names[10];
+    }
+    if (freq < 240) {
+        return note_names[11];
+    }
+    if (freq < 254) {
+        return note_names[12];
+    }
+    if (freq < 269) {
+        return note_names[13];
+    }
+    if (freq < 285) {
+        return note_names[14];
+    }
+    if (freq < 302) {
+        return note_names[15];
+    }
+    if (freq < 320) {
+        return note_names[16];
+    }
+    if (freq < 339) {
+        return note_names[17];
+    }
+    if (freq < 360) {
+        return note_names[18];
+    }
+    if (freq < 381) {
+        return note_names[19];
+    }
+    if (freq < 404) {
+        return note_names[20];
+    }
+    if (freq < 428) {
+        return note_names[21];
+    }
+    if (freq < 453) {
+        return note_names[22];
+    }
+    if (freq < 480) {
+        return note_names[23];
+    }
+    if (freq < 509) {
+        return note_names[24];
+    }
+    if (freq < 539) {
+        return note_names[25];
+    }
+    if (freq < 571) {
+        return note_names[26];
+    }
+    if (freq < 605) {
+        return note_names[27];
+    }
+    if (freq < 641) {
+        return note_names[28];
+    }
+    if (freq < 679) {
+        return note_names[29];
+    }
+    if (freq < 719) {
+        return note_names[30];
+    }
+    if (freq < 762) {
+        return note_names[31];
+    }
+    if (freq < 807) {
+        return note_names[32];
+    }
+    if (freq < 855) {
+        return note_names[33];
+    }
+    if (freq < 906) {
+        return note_names[34];
+    }
+    if (freq < 960) {
+        return note_names[35];
+    }
+    if (freq < 1017) {
+        return note_names[36];
+    }
+    if (freq < 1078) {
+        return note_names[37];
+    }
+    if (freq < 1142) {
+        return note_names[38];
+    }
+    if (freq < 1210) {
+        return note_names[39];
+    }
+    if (freq < 1282) {
+        return note_names[40];
+    }
+    if (freq < 1358) {
+        return note_names[41];
+    }
+    if (freq < 1438) {
+        return note_names[42];
+    }
+    if (freq < 1524) {
+        return note_names[43];
+    }
+    if (freq < 1615) {
+        return note_names[44];
+    }
+    if (freq < 1711) {
+        return note_names[45];
+    }
+    if (freq < 1812) {
+        return note_names[46];
+    }
+    if (freq < 1920) {
+        return note_names[47];
+    }
+    if (freq < 2034) {
+        return note_names[0];
+    }
+    return "\0";
+};
+
 void    rcu_config(void);
 void    gpio_config(void);
 void    dma_config(uint32_t channel, uint32_t data_address, size_t n);
@@ -79,6 +287,59 @@ void    i2c_config(uint32_t address_bits);
 double  signal[BUFFER_SIZE];
 uint8_t soundwave1[BUFFER_SIZE];
 uint8_t soundwave2[BUFFER_SIZE];
+
+typedef struct {
+    bool muted1;
+    bool muted2;
+    uint32_t freq1;
+    char *note1;
+    char *note2;
+    uint32_t freq2;
+} State;
+
+State lastInfo = {
+    false,
+    false,
+    NULL,
+    NULL,
+};
+
+bool state_equals(State one, State another) {
+    if (one.muted1 != another.muted1) {
+        return false;
+    }
+    if (one.muted2 != another.muted2) {
+        return false;
+    }
+    /*
+    if (one.freq1 != another.freq1) {
+        return false;
+    }
+    if (one.freq2 != another.freq2) {
+        return false;
+    }
+    */
+    return true;
+}
+
+void render_state(State info) {
+    LCD_Clear(WHITE);
+    if (info.muted1) {
+        LCD_ShowString(16, 0, (uint8_t*)("muted"), BLACK);
+    } else {
+        LCD_ShowString(16, 0, (uint8_t*)("playing"), BLACK);
+    }
+
+    if (info.muted2) {
+        LCD_ShowString(82, 0, (uint8_t*)("muted"), BLACK);
+    } else {
+        LCD_ShowString(82, 0, (uint8_t*)("playing"), BLACK);
+    }
+
+    uint8_t *name = info.note1;
+    LCD_ShowString(16, 32, name, BLACK);
+    LCD_ShowString(82, 32, info.note2, BLACK);
+}
 
 /*!
     \brief      main function
@@ -98,6 +359,11 @@ int main(void) {
     timer5_config();
     timer6_config();
 
+    Lcd_Init();
+
+    BACK_COLOR=WHITE;
+    LCD_Clear(WHITE);
+
     timer_update_event_disable(TIMER5);
     dma_channel_disable(DMA1, DMA_CH2);
 
@@ -111,8 +377,20 @@ int main(void) {
         delay_1ms(200);
     }
 
+    State info;
+    info.muted1 = true;
+    info.muted2 = true;
+    info.note1 = "";
+    info.note2 = "";
+
     gpio_bit_reset(GPIOC, GPIO_PIN_13);
+
     while (1) {
+        if (!state_equals(info, lastInfo)) {
+            render_state(info);
+            lastInfo.muted1 = info.muted1;
+            lastInfo.muted2 = info.muted2;
+        }
         /* check if ADDSEND bit is set */
         if (i2c_flag_get(I2C0, I2C_FLAG_ADDSEND)) {
             /* clear ADDSEND bit */
@@ -131,21 +409,27 @@ int main(void) {
                             if (i2c0_receiver[0] == SET_SILENT_REG) {
                                 timer_update_event_disable(TIMER5);
                                 dma_channel_disable(DMA1, DMA_CH2);
+                                info.muted1 = true;
+                                info.note1 = "";
                             }
                             if (i2c0_receiver[0] == SET_UNSILENT_REG) {
                                 timer_update_event_enable(TIMER5);
                                 dma_channel_enable(DMA1, DMA_CH2);
+                                info.note1  = get_note_name(info.freq1);
+                                info.muted1 = false;
                             }
                         } break;
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
-                                uint32_t freq = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
-                                size_t buffer_length = 178057.870984831 * pow(freq, -1.00027640151947);
+                                info.freq1 = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
+                                size_t buffer_length = 178057.870984831 * pow(info.freq1, -1.00027640151947);
                                 if (buffer_length < BUFFER_SIZE) {
                                     resample(signal, soundwave1, simple_sine, buffer_length);
                                     dma_config(DMA_CH2, (uint32_t) soundwave1, buffer_length);
                                     timer_update_event_enable(TIMER5);
                                     dma_channel_enable(DMA1, DMA_CH2);
+                                    info.muted1 = false;
+                                    info.note1  = get_note_name(info.freq1);
                                 }
                             }
                         } break;
@@ -174,22 +458,27 @@ int main(void) {
                             if (i2c1_receiver[0] == SET_SILENT_REG) {
                                 timer_update_event_disable(TIMER6);
                                 dma_channel_disable(DMA1, DMA_CH3);
+                                info.muted2 = true;
+                                info.note2  = "";
                             }
                             if (i2c1_receiver[0] == SET_UNSILENT_REG) {
                                 timer_update_event_enable(TIMER6);
                                 dma_channel_enable(DMA1, DMA_CH3);
+                                info.muted2 = false;
+                                info.note2  = get_note_name(info.freq2);
                             }
                         } break;
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
-                                uint32_t freq          = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
-                                //size_t   buffer_length = 85097.05f / (float) freq;
-                                size_t buffer_length = 178057.870984831 * pow(freq, -1.00027640151947);
+                                info.freq2 = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
+                                size_t buffer_length = 178057.870984831 * pow(info.freq2, -1.00027640151947);
                                 if (buffer_length < BUFFER_SIZE) {
                                     resample(signal, soundwave2, simple_sine, buffer_length);
                                     dma_config(DMA_CH3, (uint32_t) soundwave2, buffer_length);
                                     timer_update_event_enable(TIMER6);
                                     dma_channel_enable(DMA1, DMA_CH3);
+                                    info.muted2 = false;
+                                    info.note2  = get_note_name(info.freq2);
                                 }
                             }
                         } break;
