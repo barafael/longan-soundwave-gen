@@ -32,6 +32,8 @@ SOFTWARE.
 
 #include "main.h"
 
+#include "notenames.h"
+
 #include "lcd.h"
 
 uint8_t i2c0_receiver[32];
@@ -70,209 +72,6 @@ void resample(double array[], uint8_t output[], signal_function sig_func, size_t
     sample_to_u8(array, output, n);
 }
 
-char *note_names[] = {
-    "B",
-    "C",
-    "C#",
-    "D",
-    "D#",
-    "E",
-    "F",
-    "F#",
-    "G",
-    "G#",
-    "A",
-    "A#",
-    "B",
-    "C",
-    "C#",
-    "D",
-    "D#",
-    "E",
-    "F",
-    "F#",
-    "G",
-    "G#",
-    "A",
-    "A#",
-    "B",
-    "C",
-    "C#",
-    "D",
-    "D#",
-    "E",
-    "F",
-    "F#",
-    "G",
-    "G#",
-    "A",
-    "A#",
-    "B",
-    "C",
-    "C#",
-    "D",
-    "D#",
-    "E",
-    "F",
-    "F#",
-    "G",
-    "G#",
-    "A",
-    "A#",
-    "B",
-    "C",
-};
-
-char* get_note_name(uint32_t freq) {
-    if (freq < 127) {
-        return note_names[0];
-    }
-    if (freq < 135) {
-        return note_names[1];
-    }
-    if (freq < 143) {
-        return note_names[2];
-    }
-    if (freq < 151) {
-        return note_names[3];
-    }
-    if (freq < 160) {
-        return note_names[4];
-    }
-    if (freq < 170) {
-        return note_names[5];
-    }
-    if (freq < 180) {
-        return note_names[6];
-    }
-    if (freq < 191) {
-        return note_names[7];
-    }
-    if (freq < 202) {
-        return note_names[8];
-    }
-    if (freq < 214) {
-        return note_names[9];
-    }
-    if (freq < 227) {
-        return note_names[10];
-    }
-    if (freq < 240) {
-        return note_names[11];
-    }
-    if (freq < 254) {
-        return note_names[12];
-    }
-    if (freq < 269) {
-        return note_names[13];
-    }
-    if (freq < 285) {
-        return note_names[14];
-    }
-    if (freq < 302) {
-        return note_names[15];
-    }
-    if (freq < 320) {
-        return note_names[16];
-    }
-    if (freq < 339) {
-        return note_names[17];
-    }
-    if (freq < 360) {
-        return note_names[18];
-    }
-    if (freq < 381) {
-        return note_names[19];
-    }
-    if (freq < 404) {
-        return note_names[20];
-    }
-    if (freq < 428) {
-        return note_names[21];
-    }
-    if (freq < 453) {
-        return note_names[22];
-    }
-    if (freq < 480) {
-        return note_names[23];
-    }
-    if (freq < 509) {
-        return note_names[24];
-    }
-    if (freq < 539) {
-        return note_names[25];
-    }
-    if (freq < 571) {
-        return note_names[26];
-    }
-    if (freq < 605) {
-        return note_names[27];
-    }
-    if (freq < 641) {
-        return note_names[28];
-    }
-    if (freq < 679) {
-        return note_names[29];
-    }
-    if (freq < 719) {
-        return note_names[30];
-    }
-    if (freq < 762) {
-        return note_names[31];
-    }
-    if (freq < 807) {
-        return note_names[32];
-    }
-    if (freq < 855) {
-        return note_names[33];
-    }
-    if (freq < 906) {
-        return note_names[34];
-    }
-    if (freq < 960) {
-        return note_names[35];
-    }
-    if (freq < 1017) {
-        return note_names[36];
-    }
-    if (freq < 1078) {
-        return note_names[37];
-    }
-    if (freq < 1142) {
-        return note_names[38];
-    }
-    if (freq < 1210) {
-        return note_names[39];
-    }
-    if (freq < 1282) {
-        return note_names[40];
-    }
-    if (freq < 1358) {
-        return note_names[41];
-    }
-    if (freq < 1438) {
-        return note_names[42];
-    }
-    if (freq < 1524) {
-        return note_names[43];
-    }
-    if (freq < 1615) {
-        return note_names[44];
-    }
-    if (freq < 1711) {
-        return note_names[45];
-    }
-    if (freq < 1812) {
-        return note_names[46];
-    }
-    if (freq < 1920) {
-        return note_names[47];
-    }
-    if (freq < 2034) {
-        return note_names[0];
-    }
-    return "\0";
-};
 
 void    rcu_config(void);
 void    gpio_config(void);
@@ -651,7 +450,7 @@ void dac_config(void) {
 void timer5_config(void) {
     /* configure the TIMER5 */
     timer_prescaler_config(TIMER5, TIMER5_PRESCALER, TIMER_PSC_RELOAD_UPDATE);
-    timer_autoreload_value_config(TIMER5, 0xCa);
+    timer_autoreload_value_config(TIMER5, 0xCA);
     timer_master_output_trigger_source_select(TIMER5, TIMER_TRI_OUT_SRC_UPDATE);
 
     timer_enable(TIMER5);
@@ -666,7 +465,7 @@ void timer5_config(void) {
 void timer6_config(void) {
     /* configure the TIMER6 */
     timer_prescaler_config(TIMER6, TIMER6_PRESCALER, TIMER_PSC_RELOAD_UPDATE);
-    timer_autoreload_value_config(TIMER6, 0xFF);
+    timer_autoreload_value_config(TIMER6, 0xCA);
     timer_master_output_trigger_source_select(TIMER6, TIMER_TRI_OUT_SRC_UPDATE);
 
     timer_enable(TIMER6);
