@@ -42,7 +42,7 @@ SOFTWARE.
 typedef double (*signal_function)(double);
 
 void sample(double array[], signal_function sig_func, size_t n);
-void sample_to_u8(const double input[], uint8_t output[], size_t n);
+void sample_to_u8(const double input[], uint8_t output[], size_t n, uint8_t max);
 void resample(double array[], uint8_t output[], signal_function sig_func, size_t n);
 
 void    rcu_config(void);

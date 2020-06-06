@@ -46,6 +46,10 @@ double simple_sine(double x) {
     return sin(x);
 }
 
+double some_sound(double x) {
+    return 0.5 * sin(x) + 0.25 * sin(x * 2) + 0.25 * sin(x * 3);
+}
+
 double simple_impulse(double x) {
     if (x < (-M_PI + 0.1)) {
         return 1.0;
@@ -61,17 +65,16 @@ void sample(double array[], signal_function sig_func, size_t n) {
     }
 }
 
-void sample_to_u8(const double input[], uint8_t output[], size_t n) {
+void sample_to_u8(const double input[], uint8_t output[], size_t n, uint8_t max) {
     for (size_t index = 0; index < n; index++) {
-        output[index] = 127 + (127.0 * input[index]);
+        output[index] = (max/2) + ((max/2.0f) * input[index]);
     }
 }
 
 void resample(double array[], uint8_t output[], signal_function sig_func, size_t n) {
     sample(array, sig_func, n);
-    sample_to_u8(array, output, n);
+    sample_to_u8(array, output, n, 180);
 }
-
 
 void    rcu_config(void);
 void    gpio_config(void);
@@ -83,6 +86,7 @@ uint8_t get_i2c_address_bits(void);
 void    i2c_config(uint32_t address_bits);
 
 #define BUFFER_SIZE 2048
+
 double  signal[BUFFER_SIZE];
 uint8_t soundwave1[BUFFER_SIZE];
 uint8_t soundwave2[BUFFER_SIZE];
@@ -221,9 +225,9 @@ int main(void) {
                         case 3: {
                             if (i2c0_receiver[0] == SET_PITCH_REG) {
                                 info.freq1 = i2c0_receiver[1] | (uint16_t) i2c0_receiver[2] << 8;
-                                size_t buffer_length = 178057.870984831 * pow(info.freq1, -1.00027640151947);
+                                size_t buffer_length = 178057.870984831 * pow(info.freq1, -1);
                                 if (buffer_length < BUFFER_SIZE) {
-                                    resample(signal, soundwave1, simple_sine, buffer_length);
+                                    resample(signal, soundwave1, some_sound, buffer_length);
                                     dma_config(DMA_CH2, (uint32_t) soundwave1, buffer_length);
                                     timer_update_event_enable(TIMER5);
                                     dma_channel_enable(DMA1, DMA_CH2);
@@ -270,9 +274,9 @@ int main(void) {
                         case 3: {
                             if (i2c1_receiver[0] == SET_PITCH_REG) {
                                 info.freq2 = i2c1_receiver[1] | (uint16_t) i2c1_receiver[2] << 8;
-                                size_t buffer_length = 178057.870984831 * pow(info.freq2, -1.00027640151947);
+                                size_t buffer_length = 178057.870984831 * pow(info.freq2, -1);
                                 if (buffer_length < BUFFER_SIZE) {
-                                    resample(signal, soundwave2, simple_sine, buffer_length);
+                                    resample(signal, soundwave2, some_sound, buffer_length);
                                     dma_config(DMA_CH3, (uint32_t) soundwave2, buffer_length);
                                     timer_update_event_enable(TIMER6);
                                     dma_channel_enable(DMA1, DMA_CH3);
@@ -321,6 +325,9 @@ void gpio_config(void) {
     /* once enabled the DAC, the corresponding GPIO pin is connected to the DAC converter automatically */
     gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_4);
     gpio_init(GPIOA, GPIO_MODE_AIN, GPIO_OSPEED_50MHZ, GPIO_PIN_5);
+
+    //gpio_init(GPIOA, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_1);
+    //gpio_init(GPIOA, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_2);
 
     /* PB12, PB13, PB14 as input pins */
     gpio_init(GPIOB, GPIO_MODE_IPD, GPIO_OSPEED_2MHZ, GPIO_PIN_12);
@@ -424,17 +431,18 @@ void dac_config(void) {
     dac_trigger_source_config(DAC0, DAC_TRIGGER_T5_TRGO);
     dac_trigger_enable(DAC0);
     dac_wave_mode_config(DAC0, DAC_WAVE_DISABLE);
-    dac_output_buffer_disable(DAC0);
+    dac_output_buffer_enable(DAC0);
 
     /* enable DAC0 and DMA for DAC0 */
     dac_enable(DAC0);
     dac_dma_enable(DAC0);
 
     /* configure the DAC1 */
+
     dac_trigger_source_config(DAC1, DAC_TRIGGER_T6_TRGO);
     dac_trigger_enable(DAC1);
     dac_wave_mode_config(DAC1, DAC_WAVE_DISABLE);
-    dac_output_buffer_disable(DAC1);
+    dac_output_buffer_enable(DAC1);
 
     /* enable DAC1 and DMA for DAC1 */
     dac_enable(DAC1);
